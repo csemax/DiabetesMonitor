@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Integrated Health Monitor</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+        /* --- CSS STYLING --- */
+        body {
+            background-color: #121212;
+            color: #e0e0e0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            text-align: center;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .container { width: 100%; max-width: 900px; }
+
+        h1 { color: #00d2ff; letter-spacing: 1px; margin-bottom: 5px; }
+        .patient-info { color: #888; margin-bottom: 30px; font-size: 0.9rem; }
+
+        /* KOTAK STATUS UTAMA */
+        #status-box {
+            font-size: 1.5rem; font-weight: bold; padding: 20px;
+            border-radius: 10px; margin-bottom: 30px;
+            background-color: #333; color: white;
+            transition: all 0.5s ease;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+        }
+
+        /* GRID SYSTEM */
+        .grid-container {
+            display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 30px;
+        }
+        .grid-three { grid-template-columns: 1fr 1fr 1fr; }
+
+        .card {
+            background-color: #1e1e1e; padding: 20px;
+            border-radius: 12px; border: 1px solid #333;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+
+        .label { font-size: 0.8rem; color: #aaa; text-transform: uppercase; margin-bottom: 10px; }
+        .value { font-size: 2.5rem; font-weight: bold; color: #fff; margin: 5px 0; }
+        .unit { font-size: 0.9rem; color: #666; }
+
+        /* CHART CONTAINER */
+        .chart-wrapper {
+            background-color: #1e1e1e; padding: 15px; border-radius: 12px;
+            border: 1px solid #333; height: 350px; width: 100%; margin-bottom: 30px;
+        }
+        
+        /* WARNA STATUS */
+        .status-danger { background-color: #d32f2f !important; animation: blink 1s infinite; }
+        .status-low { background-color: #1976d2 !important; }
+        .status-warn { background-color: #fbc02d !important; color: #000 !important; }
+        .status-safe { background-color: #388e3c !important; }
+
+        @keyframes blink { 50% { opacity: 0.7; } }
+
+        /* SECTION HEADER */
+        .section-title {
+            border-top: 1px solid #333; padding-top: 20px; margin-top: 20px; margin-bottom: 15px;
+            color: #00d2ff; font-size: 1.2rem; font-weight: bold; text-align: left;
+        }
+        .small-val { font-size: 1.8rem; }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>MEDICAL MONITORING SYSTEM</h1>
+        <div class="patient-info">PASIEN: BUDI SANTOSO (ID: U-101)</div>
+
+        <div class="section-title">⚡ REAL-TIME MONITORING</div>
+        
+        <div id="status-box">MENUNGGU SENSOR...</div>
+
+        <div class="grid-container">
+            <div class="card">
+                <div class="label">Current Glucose</div>
+                <div class="value" id="rt-glucose">--</div>
+                <div class="unit">mg/dL</div>
+            </div>
+            <div class="card">
+                <div class="label">Current Heart Rate</div>
+                <div class="value" id="rt-heart">--</div>
+                <div class="unit">BPM</div>
+            </div>
+        </div>
+
+        <div class="section-title">📈 GLUCOSE TREND (Last 1 Hour)</div>
+        <div class="chart-wrapper">
+            <canvas id="glucoseChart"></canvas>
+        </div>
+
+        <div class="section-title">📊 DAILY ANALYSIS (BATCH DATA)</div>
+        
+        <div class="grid-container grid-three">
+            <div class="card">
+                <div class="label">Avg Glucose</div>
+                <div class="value small-val" id="avg-glucose">--</div>
+                <div class="unit">mg/dL</div>
+            </div>
+            <div class="card">
+                <div class="label">Max Glucose</div>
+                <div class="value small-val" id="max-glucose" style="color: #ffcc00;">--</div>
+                <div class="unit">Peak Today</div>
+            </div>
+            <div class="card">
+                <div class="label">Total Records</div>
+                <div class="value small-val" id="total-records" style="color: #00d2ff;">--</div>
+                <div class="unit">Data Points</div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+
+        // --- 1. SETUP CHART.JS ---
+        const ctx = document.getElementById('glucoseChart').getContext('2d');
+        const glucoseChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: [], // Waktu (Jam:Menit:Detik)
+                datasets: [{
+                    label: 'Glucose Level (mg/dL)',
+                    data: [], // Angka Glukosa
+                    borderColor: '#00d2ff',
+                    backgroundColor: 'rgba(0, 210, 255, 0.1)',
+                    borderWidth: 2,
+                    tension: 0.4, // Membuat garis melengkung halus
+                    pointRadius: 3,
+                    pointBackgroundColor: '#fff',
+                    fill: true
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: { 
+                        display: true,
+                        ticks: { color: '#666', maxTicksLimit: 10 },
+                        grid: { display: false }
+                    },
+                    y: { 
+                        beginAtZero: false, 
+                        grid: { color: '#333' },
+                        ticks: { color: '#888' }
+                    }
+                },
+                plugins: { 
+                    legend: { labels: { color: 'white' } }
+                },
+                animation: {
+                    duration: 0 // Matikan animasi berat agar real-time lancar
+                }
+            }
+        });
+
+        // --- 2. LOGIKA REAL-TIME (ANGKA) ---
+        const statusBox = document.getElementById('status-box');
+        const rtGlucose = document.getElementById('rt-glucose');
+        const rtHeart = document.getElementById('rt-heart');
+
+        socket.on('update_realtime', (data) => {
+            rtGlucose.innerText = data.glucose_level;
+            rtHeart.innerText = data.heart_rate;
+            
+            // Logic Warna Status
+            statusBox.className = ""; // Reset class
+            let statusText = data.status.replace("_", " ");
+
+            if (data.status === 'CRITICAL_HIGH') {
+                statusBox.classList.add('status-danger');
+                statusText = "🚨 BAHAYA TINGGI";
+            } else if (data.status === 'CRITICAL_LOW') {
+                statusBox.classList.add('status-low');
+                statusText = "📉 BAHAYA RENDAH";
+            } else if (data.status === 'WARNING') {
+                statusBox.classList.add('status-warn');
+                statusText = "⚠️ WASPADA";
+            } else {
+                statusBox.classList.add('status-safe');
+                statusText = "✅ KONDISI STABIL";
+            }
+            statusBox.innerText = statusText;
+        });
+
+        // --- 3. LOGIKA GRAFIK (FIXED) ---
+        socket.on('update_graph', (dataList) => {
+            // Debugging: Lihat console browser kalau grafik tidak muncul
+            console.log("🔥 DATA GRAFIK DITERIMA:", dataList);
+
+            if (!dataList || dataList.length === 0) return;
+
+            // FIX: Langsung ambil data tanpa .split() karena format sudah HH:MM:SS
+            const labels = dataList.map(d => d.time); 
+            const values = dataList.map(d => d.glucose);
+
+            // Masukkan data baru ke chart
+            glucoseChart.data.labels = labels;
+            glucoseChart.data.datasets[0].data = values;
+            
+            // Render ulang grafik
+            glucoseChart.update(); 
+        });
+
+        // --- 4. LOGIKA BATCH (HISTORY) ---
+        const avgGlucose = document.getElementById('avg-glucose');
+        const maxGlucose = document.getElementById('max-glucose');
+        const totalRecords = document.getElementById('total-records');
+
+        socket.on('update_history', (data) => {
+            console.log("Batch Data diterima:", data);
+            avgGlucose.innerText = data.avg_glucose;
+            maxGlucose.innerText = data.max_glucose;
+            totalRecords.innerText = data.total_records;
+        });
+    </script>
+</body>
+</html>
