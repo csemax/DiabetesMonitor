@@ -51,11 +51,15 @@ graph LR
 
 ---
 
-🛠️ Tech Stack
-Component,Technology,Description
-Ingestion,Apache Kafka,Message Broker for high-throughput data streaming.
-Processing,PySpark (Spark 3.x),Engine for both Streaming (Speed) and Batch processing.
-Storage,Redis Stack,In-memory database for sub-millisecond dashboard updates.
-Data Lake,Local Filesystem,Raw storage in CSV format.
-Backend,Node.js + Socket.io,Serves data to the frontend via WebSockets.
-Frontend,HTML5 + Chart.js,Responsive dashboard for visualization.
+⚙️ Prerequisites
+Ensure you have the following installed on your machine:
+
+Docker Desktop (Required for Kafka & Redis containers)
+
+Python 3.8+
+
+Node.js & npm
+
+Java JDK 8 or 11 (Required for Apache Spark)
+
+pip install kafka-python pyspark redis pandas numpy
